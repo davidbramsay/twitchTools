@@ -1,0 +1,6 @@
+spotify:
+  client_id:
+  client_secret:
+settings:
+  refresh_rate: 10
+  output_file: track.txt

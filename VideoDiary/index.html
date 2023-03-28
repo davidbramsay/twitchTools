@@ -1,0 +1,142 @@
+<!doctype html> 
+<head>         
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <link href="https://fonts.cdnfonts.com/css/cmu-typewriter-text" rel="stylesheet">
+
+    <meta charset="utf-8">
+    
+<style>
+
+label { 
+  font-family: 'CMU Typewriter Text', sans-serif; 
+  font-size: 24px; 
+  padding: 10px; 
+  padding-left: 100px;	  
+  color: #ac9095; 
+  width:100%; 
+  display:block;
+  -webkit-transition: all 1s ease;
+  -moz-transition: all 1s ease;
+  -o-transition: all 1s ease;
+  transition: all 1s ease;
+}
+
+.highlighted {
+  color: #2C2C2C;
+  font-size: 30px;	  
+  border-style: solid;	  
+  border-radius: 15px;	  
+  font-style: bold;	  
+  -webkit-transition: all 1s ease;
+  -moz-transition: all 1s ease;
+  -o-transition: all 1s ease;
+  transition: all 1s ease;
+}
+
+#vidicon{
+  opacity:0;	
+  -webkit-transition: all .6s ease;
+  -moz-transition: all .6s ease;
+  -o-transition: all .6s ease;
+  transition: all .6s ease;
+}
+
+</style>
+</head>
+
+
+<body style="margin-top:80px; margin-left:150px; class:column"> 
+    <div id="labels" style="width:600px; margin-bottom:140px;"></div>
+
+    <div id="vidicon" style="position:absolute; top:55px; left:110px; width:110px; height:110px; border-radius:55px; background-color: #f4f4f4;border-style:solid; border-width:3px;border-color: #7DBBC8;">
+    <video width="90" height="90" name="Video Name" autoplay loop muted style="margin:10px">
+	  <source src="./rotate_guitar.mp4">
+    </video>
+    </div>
+
+    <button type="button" id="advance" style="width:600px;height:100px;margin-right:30px">Advance and Save.</button>
+</body>
+
+
+<script>
+
+var sections = [
+ 'Activities',
+ 'Feelings',
+ 'Social Interactions',
+ 'Stressors',
+ 'Caffeine',
+ 'Food',
+ 'Exercise',
+ 'Sleep',
+ 'Productivity and Focus',
+ 'Experiment Reflections',
+ 'Gratitude'
+];
+
+var timings = {};
+
+for (i in sections){
+  //create a timing	
+  timings[sections[i]] = null;
+  
+  //add a label
+  $("#labels").append("<label id='" + sections[i].split(' ')[0] + "'>" + sections[i] + "</label>");	
+  	
+}
+
+var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+
+function getCurrentTimeStrings(){
+  var current_time = Date.now();	
+  var human_timestring = new Date(current_time - tzoffset).toISOString().slice(0, -1);
+  var timestamp = current_time.toString(); 
+  return [timestamp, human_timestring];
+}
+
+function getDateString(){
+  var vals = getCurrentTimeStrings();
+  var v = vals[1];
+  return v.substring(5,7) + v.substring(8,10) + v.substring(2,4) + '_' + v.substring(11,13) + v.substring(14,16) + v.substring(17,19);
+}
+
+var current_section = null;
+       
+$('#advance').bind('click', function(evt) {
+    if (current_section == null){	
+	   $('#vidicon').css('opacity',100);
+	   current_section = 0;
+    }else{
+        $('#' + sections[current_section].split(' ')[0]).removeClass('highlighted');
+	current_section += 1;
+    }
+
+   if (current_section < sections.length){
+
+      var times = getCurrentTimeStrings();	   
+      timings[sections[current_section]] = {'timestamp': times[0], 'timestring': times[1]}	   
+      console.log(sections[current_section] + ': ' + timings[sections[current_section]]['timestring']);	   
+
+      $('#vidicon').css('top', 55+current_section*51);	    
+      setTimeout(()=>{    
+	$('#' + sections[current_section].split(' ')[0]).addClass('highlighted');
+      }, 300);
+   } else{
+	console.log('Finished, saving...');	   
+        $('#vidicon').css('opacity',0);
+        $('#' + sections[sections.length-1].split(' ')[0]).removeClass('highlighted');
+
+	var json = JSON.stringify(timings);
+	var blob = new Blob([json], {type: "application/json"});
+
+	var a = document.createElement('a');
+	a.download    = getDateString() + "_videodiary_timings.json";
+	a.href        = window.URL.createObjectURL(blob);
+	a.textContent = "Download timings";	
+        a.style       = "display:none";
+        a.click();    
+   }
+});
+
+</script>
+</html> 

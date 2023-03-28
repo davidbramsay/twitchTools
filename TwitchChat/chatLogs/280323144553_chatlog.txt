@@ -1,0 +1,12 @@
+14:45:53,tmi.twitch.t,Welcome, GLHF!
+:tmi.twitch.tv 002 dramsay9 :Your host is tmi.twitch.tv
+:tmi.twitch.tv 003 dramsay9 :This server is rather new
+:tmi.twitch.tv 004 dramsay9 :-
+:tmi.twitch.tv 375 dramsay9 :-
+:tmi.twitch.tv 372 dramsay9 :You are in a maze of twisty passages, all alike.
+:tmi.twitch.tv 376 dramsay9 :>
+14:45:54,dramsay9,53 dramsay9 = #dramsay9 :dramsay9
+:dramsay9.tmi.twitch.tv 366 dramsay9 #dramsay9 :End of /NAMES list
+14:46:11,dramsay9,testing
+14:49:39,dramsay9,incoming chat
+14:49:46,dramsay9,seems to be working

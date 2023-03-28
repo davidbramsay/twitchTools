@@ -1,0 +1,12 @@
+.idea/
+.cache
+venv/
+__pycache__/
+
+config.yml
+track.txt
+debug.log
+error.log
+
+build/
+dist/
