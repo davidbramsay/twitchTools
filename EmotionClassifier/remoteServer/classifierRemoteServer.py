@@ -1,3 +1,8 @@
+#! /home/dramsay/EmotionClassifier/emotionClassifier/bin/python3
+
+import pickle
+import socket
+import struct
 import cv2
 from deepface import DeepFace
 from gaze_tracking import GazeTracking
@@ -11,25 +16,42 @@ if not face_cascade.load(cv2.samples.findFile(face_cascade_name)):  #adding a fa
 
 gaze = GazeTracking()
 
-video=cv2.VideoCapture(2)  #requisting the input from the webcam or camera
+HOST = ''
+PORT = 5057
+
+payload_size = struct.calcsize("L")
+
+def connect():
+    global s, conn
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    print('Socket created')
+
+    s.bind((HOST, PORT))
+    print('Socket bind complete')
+    s.listen(10)
+    print('Socket now listening')
+
+    conn, addr = s.accept()
+
+connect()
 
 img_new = cv2.imread("templates/emotion_template_gaze.png")
 gaze_background = img_new[1278:1280+102,307:309+402].copy()
 gaze_points = [(309+200,1280+50)]*40
 
 def draw_gaze(img, new_gazepoint):
-	
+
     #redraw background
     img[1278:1280+102,307:309+402] = gaze_background
 
-    #draw points on top	
+    #draw points on top
     for i in range(len(gaze_points)):
         x,y = gaze_points[i]
         colorval = round(220-(i*(220/40)))
         colorval2 = round(155+(i*(100/40)))
         cv2.line(img, (x-6,y-6), (x+6,y+6), (colorval,colorval2,colorval), 4)
         cv2.line(img, (x+6,y-6), (x-6,y+6), (colorval,colorval2,colorval), 4)
-        
+
     if new_gazepoint[0] is None:
         #failed to detect a new gazepoint
         cv2.putText(img, 'undetected.', (312,1370), cv2.FONT_HERSHEY_SIMPLEX, 1, (76,52,255), 2, cv2.LINE_AA)
@@ -41,7 +63,7 @@ def draw_gaze(img, new_gazepoint):
         #add new gazepoint
         gaze_points.pop(0)
         gaze_points.append((new_x, new_y))
-        
+
         #draw it
         cv2.line(img, (new_x-8,new_y-8), (new_x+8,new_y+8), (0,0,0), 5)
         cv2.line(img, (new_x+8,new_y-8), (new_x-8,new_y+8), (0,0,0), 5)
@@ -100,7 +122,7 @@ def fill_rect(img, x, val, color):
             c=(127,0,255)
 
     cv2.rectangle(img, (x,220), (x+40, 220+275), (255,255,255), -1)
-    cv2.rectangle(img, (x,220+(270-round(val*2.7))), (x+40, 220+275), c, -1)
+    cv2.rectangle(img, (x,int(220+(270-round(val*2.7)))), (x+40, 220+275), c, -1)
 
     if val < 15:
         c=(224,224,224)
@@ -109,55 +131,84 @@ def fill_rect(img, x, val, color):
     else:
         c=(128,128,128)
 
-    cv2.rectangle(img, (x+1,221+(270-round(val*2.7))), (x+39, 220+274), c, 2)
+    cv2.rectangle(img, (x+1,int(221+(270-round(val*2.7)))), (x+39, 220+274), c, 2)
 
 tick = time.perf_counter()
 
 durations = {'happy':0, 'sad':0,'surprise':0,'angry':0,'fear':0,'disgust':0,'neutral':0}
 amount = {'happy':0,'sad':0,'surprise':0,'angry':0,'fear':0,'disgust':0,'neutral':0,'total':0}
 
-while video.isOpened():  #checking if are getting video feed and using it
-    _,frame = video.read()
-    tock = time.perf_counter()	
+while True:
+
+    #get packet from socket
+    try:
+        data = b''
+        # Retrieve message size
+        while len(data) < payload_size:
+            data += conn.recv(4096)
+
+        packed_msg_size = data[:payload_size]
+        data = data[payload_size:]
+        msg_size = struct.unpack("L", packed_msg_size)[0]
+
+        # Retrieve all data based on message size
+        while len(data) < msg_size:
+            data += conn.recv(4096)
+
+        frame_data = data[:msg_size]
+        data = data[msg_size:]
+
+        # Extract frame
+        frame = pickle.loads(frame_data)
+
+    except:
+        print('ERROR, reset connection')
+        connect()
+
+    tock = time.perf_counter()
 
     gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)  #changing the video to grayscale to make the face analisis work properly
     face=face_cascade.detectMultiScale(gray,scaleFactor=1.1,minNeighbors=5)
     gaze.refresh(frame)
 
-
+    #process it
     try:
 
-        analyze = DeepFace.analyze(frame,actions=['emotion'])
+        cv2.imwrite("temp.jpg", frame)
+        analyze = DeepFace.analyze(img_path="temp.jpg",actions=['emotion'])
 
         frame = gaze.annotated_frame()
 
         x,y,w,h = face[0]
         img_new[233:233+314,49:49+314] = cv2.resize(frame[y:y+h, x:x+w], (314,314))
 
-	#main text
+        #main text
         cv2.rectangle(img_new, (394,34), (394+530,34+110), (255,255,255), -1)
-        cv2.putText(img_new, ' ' + analyze[0]['dominant_emotion'].upper() + ' (%2.0f%%)' % analyze[0]['emotion'][analyze[0]['dominant_emotion']], (394,123), cv2.FONT_HERSHEY_TRIPLEX, 1.6, (76,52,5), 2, cv2.LINE_AA)
-	
-        #ft.putText(img_new, analyze[0]['dominant_emotion'].upper() + '(%3.2f)' % analyze[0]['emotion'][analyze[0]['dominant_emotion']], (394,128), 40, (0,0,0), -1, cv2.LINE_AA, bottomLeftOrigin=True)
+        cv2.putText(img_new, ' ' + analyze['dominant_emotion'].upper() + ' (%2.0f%%)' % analyze['emotion'][analyze['dominant_emotion']], (394,123), cv2.FONT_HERSHEY_TRIPLEX, 1.6, (76,52,5), 2, cv2.LINE_AA)
 
-        fill_rect(img_new, 435, analyze[0]['emotion']['happy'], 'yellow')
-        fill_rect(img_new, 503, analyze[0]['emotion']['sad'], 'blue')
-        fill_rect(img_new, 571, analyze[0]['emotion']['surprise'], 'magenta')
-        fill_rect(img_new, 639, analyze[0]['emotion']['angry'], 'red')
-        fill_rect(img_new, 707, analyze[0]['emotion']['fear'], 'purple')
-        fill_rect(img_new, 774, analyze[0]['emotion']['disgust'], 'green')
-        fill_rect(img_new, 842, analyze[0]['emotion']['neutral'], 'grey')
+        fill_rect(img_new, 435, analyze['emotion']['happy'], 'yellow')
+        fill_rect(img_new, 503, analyze['emotion']['sad'], 'blue')
+        fill_rect(img_new, 571, analyze['emotion']['surprise'], 'magenta')
+        fill_rect(img_new, 639, analyze['emotion']['angry'], 'red')
+        fill_rect(img_new, 707, analyze['emotion']['fear'], 'purple')
+        fill_rect(img_new, 774, analyze['emotion']['disgust'], 'green')
+        fill_rect(img_new, 842, analyze['emotion']['neutral'], 'grey')
 
         passed = tock-tick
         tick = tock
-        if passed < 1:
-            durations[analyze[0]['dominant_emotion']] += passed/60
+
+        if passed > 240:
+            print('reseting')
+            durations = {'happy':0, 'sad':0,'surprise':0,'angry':0,'fear':0,'disgust':0,'neutral':0}
+            amount = {'happy':0,'sad':0,'surprise':0,'angry':0,'fear':0,'disgust':0,'neutral':0,'total':0}
+        elif passed < 1:
+            durations[analyze['dominant_emotion']] += passed/60
 
         for emote in durations.keys():
-            amount[emote] += analyze[0]['emotion'][emote]		
+            amount[emote] += analyze['emotion'][emote]
 
         amount['total'] += 1
-        
+
         cv2.rectangle(img_new, (478, 624), (478+400, 624+65), (255,255,255), -1)
         cv2.putText(img_new, '%2.1f mins (%02.1f%%)' % (durations['happy'], amount['happy']/amount['total']), (478,614+65), cv2.FONT_HERSHEY_TRIPLEX, 1.3, (6,5,5), 1, cv2.LINE_AA)
 
@@ -166,7 +217,7 @@ while video.isOpened():  #checking if are getting video feed and using it
 
         cv2.rectangle(img_new, (478, 793), (478+400, 793+65), (255,255,255), -1)
         cv2.putText(img_new, '%2.1f mins (%02.1f%%)' % (durations['surprise'], amount['surprise']/amount['total']), (478,848), cv2.FONT_HERSHEY_TRIPLEX, 1.3, (6,5,5), 1, cv2.LINE_AA)
-	
+
         cv2.rectangle(img_new, (478, 877), (478+400, 877+65), (255,255,255), -1)
         cv2.putText(img_new, '%2.1f mins (%02.1f%%)' % (durations['angry'], amount['angry']/amount['total']), (478,867+65), cv2.FONT_HERSHEY_TRIPLEX, 1.3, (6,5,5), 1, cv2.LINE_AA)
 
@@ -182,18 +233,20 @@ while video.isOpened():  #checking if are getting video feed and using it
         draw_gaze(img_new, (gaze.horizontal_ratio(), gaze.vertical_ratio()))
 
     except Exception as e:
+        print(e)
         pass
-        #print('no face detected')
-        #print(e)
 
-    #img_resize = cv2.resize(img_new, (308,483))
     img_resize = cv2.resize(img_new, (462,725))
 
-    #this is the part where we display the output to the user
-    cv2.imshow('classifier', img_resize)
+    # Echo it back
+    try:
+        # Serialize frame
+        data = pickle.dumps(img_resize)
+        # Send message length first
+        message_size = struct.pack("L", len(data))
+        # Then data
+        conn.sendall(message_size + data)
+    except:
+        print('ERROR, reset connection')
+        connect()
 
-    key=cv2.waitKey(1) 
-    if key==ord('q'):   # here we are specifying the key which will stop the loop and stop all the processes going
-        break
-
-video.release()

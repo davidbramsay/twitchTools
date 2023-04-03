@@ -1,52 +1,22 @@
 import cv2
 from deepface import DeepFace
-from gaze_tracking import GazeTracking
 import numpy as np
 import time
 
+print('START')
 face_cascade_name = cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml'  #getting a haarcascade xml file
+print('loaded xml')
 face_cascade = cv2.CascadeClassifier()  #processing it for our project
+print('made cascade')
 if not face_cascade.load(cv2.samples.findFile(face_cascade_name)):  #adding a fallback event
     print("Error loading xml file")
 
-gaze = GazeTracking()
 
-video=cv2.VideoCapture(2)  #requisting the input from the webcam or camera
+print('vid start...')
+video=cv2.VideoCapture(1)  #requisting the input from the webcam or camera
+print('done.')
 
 img_new = cv2.imread("templates/emotion_template_gaze.png")
-gaze_background = img_new[1278:1280+102,307:309+402].copy()
-gaze_points = [(309+200,1280+50)]*40
-
-def draw_gaze(img, new_gazepoint):
-	
-    #redraw background
-    img[1278:1280+102,307:309+402] = gaze_background
-
-    #draw points on top	
-    for i in range(len(gaze_points)):
-        x,y = gaze_points[i]
-        colorval = round(220-(i*(220/40)))
-        colorval2 = round(155+(i*(100/40)))
-        cv2.line(img, (x-6,y-6), (x+6,y+6), (colorval,colorval2,colorval), 4)
-        cv2.line(img, (x+6,y-6), (x-6,y+6), (colorval,colorval2,colorval), 4)
-        
-    if new_gazepoint[0] is None:
-        #failed to detect a new gazepoint
-        cv2.putText(img, 'undetected.', (312,1370), cv2.FONT_HERSHEY_SIMPLEX, 1, (76,52,255), 2, cv2.LINE_AA)
-    else:
-        #gaze is between 0-1 (x,y)
-        new_x = round(314 + 390*min(1,new_gazepoint[0]))
-        new_y = round(1290 + 80 - 80*min(1,new_gazepoint[1]))
-
-        #add new gazepoint
-        gaze_points.pop(0)
-        gaze_points.append((new_x, new_y))
-        
-        #draw it
-        cv2.line(img, (new_x-8,new_y-8), (new_x+8,new_y+8), (0,0,0), 5)
-        cv2.line(img, (new_x+8,new_y-8), (new_x-8,new_y+8), (0,0,0), 5)
-
-
 
 def fill_rect(img, x, val, color):
     if color=='red':
@@ -121,15 +91,17 @@ while video.isOpened():  #checking if are getting video feed and using it
     tock = time.perf_counter()	
 
     gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)  #changing the video to grayscale to make the face analisis work properly
+
+    print('about to call detectmultiscale...')
     face=face_cascade.detectMultiScale(gray,scaleFactor=1.1,minNeighbors=5)
-    gaze.refresh(frame)
+    print('done.')
 
 
     try:
 
-        analyze = DeepFace.analyze(frame,actions=['emotion'])
-
-        frame = gaze.annotated_frame()
+        print('about to call deepface...')
+        #analyze = DeepFace.analyze(frame,actions=['emotion'])
+        print('done.')
 
         x,y,w,h = face[0]
         img_new[233:233+314,49:49+314] = cv2.resize(frame[y:y+h, x:x+w], (314,314))
@@ -179,7 +151,6 @@ while video.isOpened():  #checking if are getting video feed and using it
         cv2.rectangle(img_new, (478, 1131), (478+400, 1131+65), (255,255,255), -1)
         cv2.putText(img_new, '%2.1f mins (%02.1f%%)' % (durations['neutral'], amount['neutral']/amount['total']), (478,1121+65), cv2.FONT_HERSHEY_TRIPLEX, 1.3, (6,5,5), 1, cv2.LINE_AA)
 
-        draw_gaze(img_new, (gaze.horizontal_ratio(), gaze.vertical_ratio()))
 
     except Exception as e:
         pass
