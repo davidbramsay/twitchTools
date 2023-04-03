@@ -8,6 +8,7 @@ import wx
 from .threaded import InfiniteTimer
 from os import path
 import sys
+from datetime import datetime
 
 
 def resource_path(relative_path):
@@ -32,11 +33,18 @@ except (OSError, yaml.YAMLError):
 
 output_file = cfg['settings']['output_file']
 
+now = datetime.now()
+current_time = now.strftime("%m%d%y_%H%M%S")
+log_file = 'spotifyLogs/' + current_time + '_spotifylog.txt'
 
 @atexit.register
 def clear_track_file() -> None:
     with open(output_file, 'w') as f:
         f.write('')
+    with open(log_file, 'a+', 'utf-8') as f:
+        now = datetime.now()
+        currentTime = now.strftime("%H:%M:%S")
+        f.write(currentTime + ',' + 'SPOTIFY_OFF\n')
 
 
 def create_menu_item(menu, label, func):
@@ -141,6 +149,11 @@ class App(wx.App):
         track_string = self.player.get_string()
         with codecs.open(output_file, 'w', 'utf-8') as f:
             f.write(track_string)
+
+        with codecs.open(log_file, 'a+', 'utf-8') as f:
+            now = datetime.now()
+            currentTime = now.strftime("%H:%M:%S")
+            f.write(currentTime + ',' + track_string + '\n')
 
     def OnExit(self):
         # Double checking, not sure if it helps

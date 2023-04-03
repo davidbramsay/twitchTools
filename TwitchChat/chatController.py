@@ -44,7 +44,7 @@ class TwitchControl:
         self.lastAnnotations = []
 
         now = datetime.now()
-        current_time = now.strftime("%d%m%y%H%M%S")
+        current_time = now.strftime("%m%d%y_%H%M%S")
         self.filename = 'chatLogs/' + current_time + '_chatlog.txt'
 
         self.sched.add_job(self.sendReminder, 'interval', seconds=60)
@@ -77,7 +77,7 @@ class TwitchControl:
                     msgUser = 'PARSE_FAILED'
                     msgContent = respClean
 
-                #no matter what, append/log the chat        
+                #no matter what, append/log the chat
                 with open(self.filename, 'a+') as f:
                     f.write(currentTime + ',' + msgUser + ',' + msgContent)
 
@@ -161,17 +161,17 @@ class TwitchControl:
 
                 if IS_COMMAND:
                     #update display file with the last annotations, capped at 50
-                    if (len(self.lastAnnotations)>=50):                          
-                        self.lastAnnotations.pop(0)    
+                    if (len(self.lastAnnotations)>=50):
+                        self.lastAnnotations.pop(0)
 
-                    with open(r'currentChatWindow.txt', 'w') as f:    
+                    with open(r'currentChatWindow.txt', 'w') as f:
                         for line in self.lastAnnotations:
                             f.write("%s\n" % line)
 
 
     def sendReminder(self):
         outMessages = ["Is David looking focused? Rate David's focus using the command !focus {1-5}, where 1=very distracted, 2=distracted, 3=neutral, 4=focused, 5=totally lost in what he's doing (i.e '!focus 2').", "Is David looking stressed?  Rate David's stress using the command !stress {1-5}, where 1=very calm, 2=calm, 3=neutral, 4=stressed, 5=very stressed (i.e. '!stress 4').", "Is David looking tired?  Rate David's energy using the command !tired {1-5}, where 1=very energized, 2=energized, 3=neutral, 4=tired, 5=very tired (i.e. '!tired 5').", "How's David's feeling? Post a unicode emoji that represents his current emotion with the !mood command (i.e. `!mood \U0001F600'). " + emojimessage]
-        
+
         message = 'PRIVMSG {} :{}\r\n'.format(self.channel.lower(), random.choice(outMessages))
         self.sock.send(message.encode('utf-8'))
 
