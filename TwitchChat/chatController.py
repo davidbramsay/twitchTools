@@ -4,6 +4,8 @@ from datetime import datetime
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 import yaml
+import subprocess
+import urllib.request
 
 
 #This sends a message to chat every minute with instructions for labeling David's behavior.
@@ -16,7 +18,7 @@ EMOJIS=["Here are some to copy/paste: \U0001F600\U0001F603\U0001F604\U0001F601\U
 
 emojimessage = " | ".join(EMOJIS)
 
-
+currentActivity = ''
 
 with open('config.yaml', 'r') as f:
     OAUTH_TOKEN = yaml.load(f, Loader=yaml.FullLoader)['token']
@@ -47,6 +49,7 @@ class TwitchControl:
         current_time = now.strftime("%m%d%y_%H%M%S")
         self.filename = 'chatLogs/' + current_time + '_chatlog.txt'
 
+        self.sched.add_job(self.pullCurrentActivity, 'interval', seconds=3)
         self.sched.add_job(self.sendReminder, 'interval', seconds=60)
         self.sched.start()
 
@@ -168,6 +171,21 @@ class TwitchControl:
                         for line in self.lastAnnotations:
                             f.write("%s\n" % line)
 
+    def pullCurrentActivity(self):
+        global currentActivity
+        try:
+            contents = urllib.request.urlopen("http://streampi.media.mit.edu:5000/currentActivity.txt").read()
+            activity = str(contents).split('\'')[-2]
+            if activity != currentActivity:
+                print('got new activity:' + activity)
+                subprocess.Popen('echo "' + activity + '" > /Users/davidramsay/Documents/TwitchTools/CurrentActivity.txt', shell=True)
+                currentActivity = activity
+
+        except Exception as e:
+            print(e)
+            print('Failed to grab current activity.txt')
+
+    #subprocess.Popen('curl http://streampi.media.mit.edu:5000/currentActivity.txt > /Users/davidramsay/Documents/TwitchTools/CurrentActivity.txt', shell=True)
 
     def sendReminder(self):
         outMessages = ["Is David looking focused? Rate David's focus using the command !focus {1-5}, where 1=very distracted, 2=distracted, 3=neutral, 4=focused, 5=totally lost in what he's doing (i.e '!focus 2').", "Is David looking stressed?  Rate David's stress using the command !stress {1-5}, where 1=very calm, 2=calm, 3=neutral, 4=stressed, 5=very stressed (i.e. '!stress 4').", "Is David looking tired?  Rate David's energy using the command !tired {1-5}, where 1=very energized, 2=energized, 3=neutral, 4=tired, 5=very tired (i.e. '!tired 5').", "How's David's feeling? Post a unicode emoji that represents his current emotion with the !mood command (i.e. `!mood \U0001F600'). " + emojimessage]
