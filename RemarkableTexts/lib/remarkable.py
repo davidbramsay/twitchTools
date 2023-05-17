@@ -19,7 +19,6 @@ import datetime
 
 default_prepdir = tempfile.mkdtemp(prefix="resync-")
 ssh_socketfile = '/tmp/remarkable-push.socket'
-ssh_connection = None
 
 def gen_did():
     return str(uuid.uuid4())
@@ -113,7 +112,7 @@ class Node:
             self.exists = True
 
         elif len(filtered_metadata) > 1:
-            # we have ambiguously many files named the same in this directory; delete the old ones 
+            # we have ambiguously many files named the same in this directory; delete the old ones
             ordered_metadata = [m for m in sorted(filtered_metadata, key=lambda x: x[1]['lastModified'])]
             for md in ordered_metadata[:-1]:
                 print('Found duplicates of this file when trying to overwrite; deleting oldest... ')
@@ -121,7 +120,7 @@ class Node:
                 cmd = f'ssh -S {ssh_socketfile} root@10.11.99.1 "rm -r ~/.local/share/remarkable/xochitl/{u}*"'
                 res = subprocess.getoutput(cmd)
 
-            #now we have one left    
+            #now we have one left
             did, md = ordered_metadata[-1]
             self.id = did
             self.initial_md = md
@@ -216,7 +215,7 @@ class Node:
             with open(filename, 'wb') as f:
                 f.write(resp.read())
             os.chdir(current_dir)
-            return True    
+            return True
         except urllib.error.URLError as e:
             print(f"{e.reason}: Is the web interface enabled? (Settings > Storage > USB web interface)")
             os.chdir(current_dir)
@@ -359,89 +358,119 @@ def fileUpdated(t1, t2):
 
 
 ###### PUBLIC API FOR USE #######
+class Remarkable():
 
-def notEditing():
-    ''' attempts to ssh into remarkable and check, based on log file, if a document is open.  Only on successful log in and detecting of no 
-    open document do we return True; False if logged in successfully but editing, None if failed to SSH into remarkable. '''
-    try:
-        lastLog = subprocess.getoutput(f'ssh -S {ssh_socketfile} root@10.11.99.1 "journalctl -u xochitl | grep \'rm.documentlockmanager\' | tail -1"')
-
-        if("Opening" in lastLog):
-            return False
-
-        return True
-    except:
-        return None
-        
+    def __init__(self):
+        self.ssh_connection = None
+        self.connect()
 
 
-def connect():
-    ''' attempts to connect to ssh, if failed it returns false; else it closes ssh and returns true.  Simple ssh test for remarkable.'''
-    while(1):
+    def connect(self):
+        ''' attempts to connect to ssh, if failed it returns false; else returns true.'''
+
         print('Attempting main SSH connection...')
+        if self.ssh_connection is None:
 
-        ssh_connection = subprocess.Popen(f'ssh -o ConnectTimeout=1 ServerAliveInterval=10 -M -N -q -S {ssh_socketfile} root@10.11.99.1', shell=True)
+            self.ssh_connection = subprocess.Popen(f'ssh -o ConnectTimeout=1 ServerAliveInterval=10 -M -N -q -S {ssh_socketfile} root@10.11.99.1', shell=True)
 
-        # quickly check if we actually have a functional ssh connection (might not be the case right after an update)
-        checkmsg = subprocess.getoutput(f'ssh -S {ssh_socketfile} root@10.11.99.1 "/bin/true"')
+            # quickly check if we actually have a functional ssh connection (might not be the case right after an update)
+            checkmsg = subprocess.getoutput(f'ssh -S {ssh_socketfile} root@10.11.99.1 "/bin/true"')
 
-        if checkmsg == "":
-            print('success.')
-            return True
+            if checkmsg == "":
+                print('success.')
+                return True
 
+            else:
+                print("ssh timeout, try again later...")
+                print(checkmsg)
+                self.ssh_connection.terminate()
+                self.ssh_connection = None
         else:
-            print("ssh timeout, trying again in 15s...")
-            print(checkmsg)
-            ssh_connection.terminate()
-            time.sleep(15)
+            print('Already connected.')
 
 
-def disconnect():
-        if ssh_connection is not None:
-            ssh_connection.terminate()
+    def disconnect(self):
+            if self.ssh_connection is not None:
+                self.ssh_connection.terminate()
+                self.ssh_connection = None
 
 
-def isUpdated(node, last_modified):
-    ''' check if file represented by node has newer modified time than last_modified. True if successful connect and detect it has been updated, False.
-    if successful connect but nothing updated, None if failed to SSH.'''
-    try:
-        new_modified = getFileDate(node)
-        if fileUpdated(last_modified, new_modified):
+    def notEditing(self):
+        ''' attempts to ssh into remarkable and check, based on log file, if a document is open.  Only on successful log in and detecting of no
+        open document do we return True; False if logged in successfully but editing, None if failed to SSH into remarkable. '''
+
+        if self.ssh_connection is None:
+            return None
+
+        try:
+            lastLog = subprocess.getoutput(f'ssh -S {ssh_socketfile} root@10.11.99.1 "journalctl -u xochitl | grep \'rm.documentlockmanager\' | tail -1"')
+
+            if("Opening" in lastLog):
+                return False
+
             return True
-        else:
-            return False
-    except:
-        return None
+        except:
+            self.disconnect()
+            return None
 
 
-def pullDocument(node, folder):
-    ''' download pdf represented by node to cwd+folder.  On success get a true, else get a None for webdownload fail.'''
-    return node.download(targetdir=str(pathlib.Path.cwd()) + '/' + folder)
+    def isUpdated(self, node, last_modified):
+        ''' check if file represented by node has newer modified time than last_modified. True if successful connect and detect it has been updated, False.
+        if successful connect but nothing updated, None if failed to SSH into the remarkable.'''
+
+        if self.ssh_connection is None:
+            return None
+
+        try:
+            new_modified = getFileDate(node)
+            if fileUpdated(last_modified, new_modified):
+                return True
+            else:
+                return False
+        except:
+            self.disconnect()
+            return None
 
 
-def pullIfUpdated(node, last_modified, folder):
-    '''pulls documents if they're updated after a check. True if success; none if SSH or webdownload fails.'''
-    updated = isUpdated(node, last_modified)
+    def pullDocument(self, node, folder):
+        ''' download pdf represented by node to cwd+folder.  On success get a true, else get a None for webdownload fail.'''
+        if self.ssh_connection is None:
+            return None
 
-    if updated:
-        print('Detected updated document, attempting to pull...')
-        return pullDocument(node, folder)
-
-    elif updated == None:
-        print('SSH connection error on isUpdated.')
-        return None
-
-    return False
+        return node.download(targetdir=str(pathlib.Path.cwd()) + '/' + folder)
 
 
-def pushDocument(pdf):
-    ''' push document to remarkable, pdf = './TO_REMARKABLE/*.pdf'.  Gives (node, last_modified) on success, (None, None) on fail. '''
-    try:
-        node = push_to_remarkable(pdf)
-        time.sleep(2)
-        last_modified = getFileDate(node)
-        return node, last_modified
-    except Exception as e:
-        print('Failed to push to Remarkable')
-        print(e)
-        return None, None
+    def pullIfUpdated(self, node, last_modified, folder):
+        '''pulls documents if they're updated after a check. True if success; none if SSH or webdownload fails.'''
+        if self.ssh_connection is None:
+            return None
+
+        updated = self.isUpdated(node, last_modified)
+
+        if updated:
+            print('Detected updated document, attempting to pull...')
+            return self.pullDocument(node, folder)
+
+        elif updated == None:
+            print('SSH connection error on isUpdated.')
+            self.disconnect()
+            return None
+
+        return False
+
+
+    def pushDocument(self, pdf):
+        ''' push document to remarkable, pdf = './TO_REMARKABLE/*.pdf'.  Gives (node, last_modified) on success, (None, None) on fail. '''
+        if self.ssh_connection is None:
+            return None, None
+
+        try:
+            node = push_to_remarkable(pdf)
+            time.sleep(2)
+            last_modified = getFileDate(node)
+            return node, last_modified
+
+        except Exception as e:
+            print('Failed to push to Remarkable')
+            print(e)
+            return None, None

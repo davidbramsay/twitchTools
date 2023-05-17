@@ -10,7 +10,7 @@ class Datastore:
         #try to load state, if not successful create empty
         try:
             with open('state.pkl', 'rb') as p:
-                self.state = pickle.load(p) 
+                self.state = pickle.load(p)
 
         except:
             print('CANNOT FIND STATE.PKL, initializing')
@@ -31,7 +31,7 @@ class Datastore:
             self.state['last_text'][u] = updates[u]
 
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
 
     def printQueue(self):
@@ -42,39 +42,39 @@ class Datastore:
         '''add messages array to print queue'''
         self.state['print_queue'].extend(messages)
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
     def replacePrintQueue(self, queue):
         '''replace queue'''
         self.state['print_queue'] = queue
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
 
     def lastTexts(self):
         ''' return last texts '''
         return self.state['last_text']
 
-    def addTexts(self, textdict):    
+    def addTexts(self, textdict):
         ''' update last texts from dictionary {numstring:text, numstring:text...} '''
         for n in textdict:
             self.state['last_text'][n] = textdict[n]
 
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
-    
+
     def getTextsNotOnDevice(self):
         '''return dict of numstring:text that need to be pushed to device; assumes last_text is up to date, and looks for
         (1) keys in last_text that are not on device, and (2) texts on device that don't match latest text in last_text '''
         returnval = {}
 
         for num in self.state['last_text']:
-            
+
             if num in self.state['on_tablet'].keys():
                 if self.state['on_tablet'][num]['text'] != self.state['last_text'][num]:
                     returnval[num] = self.state['last_text'][num]
-            else:    
+            else:
                 returnval[num] = self.state['last_text'][num]
 
         return returnval
@@ -89,13 +89,13 @@ class Datastore:
         self.state['on_tablet'][numstring] = entry
 
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
     def removeOnTablet(self, numstring):
         del self.state['on_tablet'][numstring]
 
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
 
     def writeOnTablet(self, on_tablet):
@@ -103,7 +103,7 @@ class Datastore:
         self.state['on_tablet'] = on_tablet
 
         with open('state.pkl', 'wb') as p:
-            pickle.dump(self.state, p) 
+            pickle.dump(self.state, p)
 
 
     def pdfsToRemarkable(self):
@@ -144,13 +144,13 @@ def pushPDFsToRemarkable():
             node, last_mtime = rm.pushDocument(p)
             print('done.')
 
-            #on success: 
+            #on success:
             if node is not None:
 
-                #create entry for on_device data 
+                #create entry for on_device data
                 with open(p[:-3] + 'meta', 'rb') as metadata:
 
-                    numstring, entry = pickle.load(metadata) 
+                    numstring, entry = pickle.load(metadata)
 
                     entry['node'] = node
                     entry['last_mtime'] = last_mtime
@@ -181,28 +181,37 @@ def pullPDFsFromRemarkable():
             #on successful pull, delete it from tablet state
             to_remove.append(numstring)
 
-    for numstring in to_remove:        
+    for numstring in to_remove:
         datastore.removeOnTablet(numstring)
 
 
 def sendPDFsAsText():
     for p in datastore.pdfsFromRemarkable():
+        try:
+            print('Processing ' + p + '...', end='')
+            numstring, text, img = pdf.ocrPDF(p)
 
-        print('Processing ' + p + '...', end='')
-        numstring, text, img = pdf.ocrPDF(p)
+            if numstring is None:
+                print('Empty text. Deleting ' + p + '...')
+                datastore.deletePDF(p)
 
-        print('done.\n\t-- ' + numstring + ': ' + text + '\n\tSending text...', end='')
-        failed = textControl.sendText(numstring, text)
-        if not failed:
-            print('Successful.\n\tDeleting PDF...', end='')
-            datastore.deletePDF(p)
-            print('done.\n\tSending image...', end='')
-            textControl.sendImage(numstring, os.getcwd() + '/' + img)
-            print('Sent.\n\tRemoving temp image file...', end='')
-            os.remove(img)
-            print('done.')
-        else:
-            print('failed. Leaving PDF to be processed again.')
+            print('done.\n\t-- ' + numstring + ': ' + text + '\n\tSending text...', end='')
+            failed = textControl.sendText(numstring, text)
+            if not failed:
+                print('Successful.\n\tDeleting PDF...', end='')
+                datastore.deletePDF(p)
+                print('done.\n\tSending image...', end='')
+                textControl.sendImage(numstring, os.getcwd() + '/' + img)
+                print('Sent.\n\tRemoving temp image file...', end='')
+                time.sleep(3)
+                os.remove(img)
+                print('done.')
+            else:
+                print('failed. Leaving PDF to be processed again.')
+
+        except Exception as e:
+            print('FAILED TO PROCESS TEXT ' + p)
+            print(e)
 
 
 def handleNewTexts(messages):
@@ -259,9 +268,9 @@ def handleNewTexts(messages):
 
 
 textControl = lib.textController(debug=True)
-printer = lib.printController() 
-rm = lib.remarkable 
-pdf = lib.processPDF 
+printer = lib.printController()
+rm = lib.Remarkable()
+pdf = lib.processPDF
 
 print('load previous data and search for new texts...')
 datastore = Datastore(textControl)
@@ -271,15 +280,15 @@ print('generating new pdfs in TO_REMARKABLE folder...')
 to_pdf_queue = pdf.generatePDFs(to_pdf_queue)
 print('pushing to remarkable...')
 rm.connect()
-print('connected.')
 pushPDFsToRemarkable()
 
 print('entering loop...')
 while(1):
     print('-- ITERATE --')
 
+    rm.connect()
 
-    print('check pdf modified times and pull edited onces...')
+    print('check pdf modified times and pull edited ones...')
     pullPDFsFromRemarkable()
     print('done.')
 
@@ -288,7 +297,7 @@ while(1):
     print('done.')
 
     print('check for new messages...', end='')
-    messages = textControl.getTexts()
+    messages = textControl.getTextsWithAttachments()
     print('got ' + str(len(messages)) + '.')
     handleNewTexts(messages)
     print('done.')
@@ -303,6 +312,4 @@ while(1):
     pushPDFsToRemarkable()
     print('done.')
 
-    rm.disconnect()
     time.sleep(15)
-    rm.connect()

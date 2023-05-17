@@ -1,7 +1,7 @@
 from fpdf import FPDF
 from pdf2image import convert_from_path
 import cv2
-import numpy as np 
+import numpy as np
 from google.cloud import vision
 import emoji
 import random
@@ -49,10 +49,10 @@ def generatePDF(numstring, message):
 
         # save FPDF() class into a variable
         pdf = FPDF()
-         
+
         # Add a page
         pdf.add_page()
-         
+
         #demoji and cut message off after 1100 characters
         printmessage = emoji.demojize(message)[-1100:]
 
@@ -63,14 +63,14 @@ def generatePDF(numstring, message):
         # that you want in the pdf
         pdf.add_font("CMU", '', "cmuntb.ttf", uni=True)
         pdf.set_font("CMU", size = 12)
-     
+
         # create a cell
         pdf.cell(200, 10, txt = 'From: ' + name,
                  ln = 1, align = 'L')
-         
+
         # add another cell
         pdf.multi_cell(180, 5, txt = printmessage, align = 'L')
-         
+
 
         #draw line below which we will write
         pdf.line(70, 100, 210-70, 100)
@@ -81,14 +81,14 @@ def generatePDF(numstring, message):
 
         # save the pdf with name .pdf
         filename = 'TO_REMARKABLE/' +  name + '.pdf'
-        pdf.output(filename)  
+        pdf.output(filename)
 
         #generate metadata
         metadata= [numstring, {'text': message, 'name': name}]
 
         #write metadata as well
         with open(filename[:-3] + 'meta', 'wb') as p:
-            pickle.dump(metadata, p) 
+            pickle.dump(metadata, p)
 
         print('done.')
         return filename
@@ -104,7 +104,7 @@ def ocrPDF(pathPDF):
     ''' return (numstring, OCRed_text) from PDF at path '''
 
     # grab handwriting pdf with convert_from_path function
-    images = convert_from_path(pathPDF, poppler_path="/usr/local/Cellar/poppler/23.03.0/bin")
+    images = convert_from_path(pathPDF)
     img = np.array(images[0])
 
     # Crop to just the part with the handwriting
@@ -117,17 +117,21 @@ def ocrPDF(pathPDF):
 
     client = vision.ImageAnnotatorClient()
     resp =  client.text_detection(image=google_img)
-    ocr_output = resp.text_annotations[0].description.replace('\n',' ')
 
-    ocr_output += ' (OCRed in python; forgive typos)'
+    try:
+        ocr_output = resp.text_annotations[0].description.replace('\n',' ')
+        ocr_output += ' (OCRed in python; forgive typos)'
+    except:
+        print('No text annotation created; empty text.  Skip it.')
+        return None, None, None
 
-    name = pathPDF.split('/')[-1][:-4]          
-    numstring = _getNumstring(name)          
+    name = pathPDF.split('/')[-1][:-4]
+    numstring = _getNumstring(name)
 
-    img_filepath = 'temp/' + numstring[1:] + format(random.getrandbits(32), 'x') + '.jpg'          
+    img_filepath = 'temp/' + numstring[1:] + format(random.getrandbits(32), 'x') + '.jpg'
     if not cv2.imwrite(img_filepath, img):
         print('error writing file')
-    print('created ' + img_filepath)    
+    print('created ' + img_filepath)
 
     return numstring, ocr_output, img_filepath
 
